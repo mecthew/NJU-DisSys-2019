@@ -37,6 +37,14 @@ type ApplyMsg struct {
 	Snapshot    []byte // ignore for lab2; only used in lab3
 }
 
+type RaftState int
+// role of each raft endpoint
+const (
+	Follower RaftState = iota
+	Candidate
+	Leader
+)
+
 //
 // A Go object implementing a single Raft peer.
 //
