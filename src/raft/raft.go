@@ -100,7 +100,7 @@ type Raft struct {
 	// Channel for judging whether receive RPC or not
 	requestVoteCh   chan bool
 	appendEntriesCh chan bool
-	leaderCh        chan bool
+	winElectionCh        chan bool
 	applyCh         chan ApplyMsg
 	isKilled        bool
 }
@@ -253,7 +253,7 @@ func (rf *Raft) startRequestVote() {
 
 					if atomic.LoadInt32(&votedNum) > int32(len(rf.peers)/2) {
 						rf.convertTo(Leader)
-						rf.receiveRPC(rf.leaderCh)
+						rf.receiveRPC(rf.winElectionCh)
 					}
 				}
 			}(i, args)
@@ -467,7 +467,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.requestVoteCh = make(chan bool, 1)
 	rf.appendEntriesCh = make(chan bool, 1)
-	rf.leaderCh = make(chan bool, 1)
+	rf.winElectionCh = make(chan bool, 1)
 	rf.applyCh = applyCh
 	rf.isKilled = false
 
@@ -506,7 +506,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 					rf.convertTo(Follower)
 					rf.mu.Unlock()
 				case <-rf.requestVoteCh:
-				case <-rf.leaderCh:
+				case <-rf.winElectionCh:
 				case <-time.After(electionTimeout):
 					rf.mu.Lock()
 					rf.convertTo(Candidate)
