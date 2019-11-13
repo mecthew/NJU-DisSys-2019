@@ -22,7 +22,6 @@ import (
 	"encoding/gob"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 import "labrpc"
@@ -100,7 +99,7 @@ type Raft struct {
 	// Channel for judging whether receive RPC or not
 	requestVoteCh   chan bool
 	appendEntriesCh chan bool
-	winElectionCh        chan bool
+	winElectionCh   chan bool
 	applyCh         chan ApplyMsg
 	isKilled        bool
 }
@@ -229,12 +228,17 @@ func (rf *Raft) startRequestVote() {
 		}
 		rf.mu.Unlock()
 
-		var votedNum int32 = 1
+		type VotedNum struct {
+			cnt int
+			mu  sync.Mutex
+		}
+		votedNum := VotedNum{1, sync.Mutex{}}
+
 		for i := 0; i < len(rf.peers); i++ {
 			if i == rf.me {
 				continue
 			}
-			go func(id int, args RequestVoteArgs) {
+			go func(id int, args RequestVoteArgs, votedNum *VotedNum) {
 				reply := &RequestVoteReply{}
 				ok := rf.sendRequestVote(id, args, reply)
 				if ok {
@@ -248,15 +252,17 @@ func (rf *Raft) startRequestVote() {
 					case rf.state != Candidate:
 						return
 					case reply.VoteGranted:
-						atomic.AddInt32(&votedNum, 1)
+						votedNum.mu.Lock()
+						votedNum.cnt++
+						votedNum.mu.Unlock()
 					}
 
-					if atomic.LoadInt32(&votedNum) > int32(len(rf.peers)/2) {
+					if votedNum.cnt > int(len(rf.peers)/2) {
 						rf.convertTo(Leader)
 						rf.receiveRPC(rf.winElectionCh)
 					}
 				}
-			}(i, args)
+			}(i, args, &votedNum)
 
 		}
 	}
